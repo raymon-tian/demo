@@ -4,12 +4,16 @@ import torch
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torchvision import datasets, transforms,models
+
 from config import config
+from mine_folder import ImageFolder
 
 cuda = config['cuda']
 seed = config['seed']
 batch_size = config['batch_size']
 test_batch_size = config['test_batch_size']
+topC = config['topC']
+randomN = config['randomN']
 
 torch.manual_seed(seed)
 if cuda:
@@ -82,23 +86,35 @@ def imagenet12_data_loader():
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        transforms.Compose([
+    train_dataset = ImageFolder(
+        root=traindir,
+        transform=transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
-        ]))
+        ]),
+        topC=0,
+        randomN=randomN
+    )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,**kwargs)
 
-    val_dataset = datasets.ImageFolder(
-        valdir, transforms.Compose([
+    val_dataset = ImageFolder(
+        root=valdir,
+        transform=transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
-        ]))
+        ]),
+        topC=topC,
+        randomN=0
+    )
     val_loader = DataLoader(val_dataset,batch_size=test_batch_size,shuffle=False,**kwargs)
 
     return train_loader,val_loader
+
+if __name__ == '__main__':
+    train_loader, val_dataset = imagenet12_data_loader()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        pass

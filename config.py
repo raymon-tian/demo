@@ -36,3 +36,5 @@ config['channel_select_algo'] = 'subspace_cluster'
 config['model_name'] = 'vgg16'
 config['dataset_name'] = 'imagenet12'
 config['fine_tune'] = False
+config['topC'] = 3
+config['randomN'] = 100
