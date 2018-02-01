@@ -1,0 +1,32 @@
+
+        # 拷贝，将不会计算Loss关于refer_fea_maps的梯度，但是会计算Loss关于fea_maps的梯度
+        refer_fea_maps = fea_maps.clone()
+        refer_fea_maps = Variable(refer_fea_maps.data).cuda()
+        # 生成特征图对应的稀疏向量，必须要设置requires_grad的True
+        _, C, _, _ = fea_maps.size()
+        if sparse_vec == None:
+            # 用索引的方式来访问得到scalar，在反向的时候应该是不可行的
+            # sparse_weights = Variable(torch.randn(C),requires_grad=True)
+            sparse_vec = [Variable(torch.randn(1),requires_grad=True).cuda() for i in range(C)]
+        sparse_fea_maps = []
+        for c_idx in range(C):
+            # 索引的方式应该是不行的，应该求一个mask的方式
+            # fea_map = fea_maps[:,c_idx,:,:]
+            mask = cal_mask(fea_maps,1,c_idx)
+            fea_map = fea_maps * mask
+            fea_map = fea_map * sparse_vec[c_idx].expand_as(fea_map)
+            sparse_fea_maps.append(fea_map)
+        sparse_fea_maps = sum(sparse_fea_maps)
+        """
+        计算attention map
+        """
+        A_refer = cal_attention_map(refer_fea_maps)
+        A = cal_attention_map(sparse_fea_maps)
+
+        loss_A = nn.MSELoss()(A,A_refer)
+        sparse_vec_l2 = [torch.pow(sc,2) for sc in sparse_vec]
+        loss_sparse = torch.sqrt(sum(sparse_vec_l2))
+        loss_sparse = 0.5 * config['gamma'] * loss_sparse
+        loss = loss_A + loss_sparse
+        loss.backward()
+        optimizer.step()
