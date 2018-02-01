@@ -244,7 +244,7 @@ if os.path.exists(save_path) is False:
     os.makedirs(save_path)
 
 for e in range(1,config['epoch']+1):
-    # test()
+    test()
     train(e)
     if e % config['save_freq'] == 0 or e == config['epoch']:
         torch.save(stu_model.state_dict(),os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e)))

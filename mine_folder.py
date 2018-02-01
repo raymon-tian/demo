@@ -30,10 +30,13 @@ def find_classes(dir,topC):
     return classes, class_to_idx
 
 
-def make_dataset(dir, class_to_idx, randomN):
+def make_dataset(dir, class_to_idx, topC, randomN):
     images = []
     dir = os.path.expanduser(dir)
-    for target in sorted(os.listdir(dir)):
+    sorted_dir = sorted(os.listdir(dir))
+    if (topC is not 0) and topC < len(sorted_dir):
+        sorted_dir = sorted_dir[:topC]
+    for target in sorted_dir:
         d = os.path.join(dir, target)
         if not os.path.isdir(d):
             continue
@@ -112,7 +115,7 @@ class ImageFolder(data.Dataset):
         assert randomN>= 0,"randomN can not less than 0"
 
         classes, class_to_idx = find_classes(root,topC)
-        imgs = make_dataset(root, class_to_idx, randomN)
+        imgs = make_dataset(root, class_to_idx, topC, randomN)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
