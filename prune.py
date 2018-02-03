@@ -93,8 +93,15 @@ def test():
         data, target = Variable(data, volatile=True), Variable(target)
         output, conv_output = stu_model.forward(data,is_test=True)
         test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
-        pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
-        correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+        # pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+        _, pred_topK = torch.topk(source=output.data,k=config['topK'],dim=1)
+        count = 0
+        target = target.unsqueeze(1)
+        for temp_idx in range(target.size()[0]):
+            if (target.data[temp_idx,0] in pred_topK[temp_idx]) is True:
+                count += 1
+        # correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+        correct += count
 
     test_loss /= len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(

@@ -61,7 +61,7 @@ def inject_params(target,refer):
     """
     for k in refer.keys():
         if k in target.keys():
-            assert target[k].size() == refer[k].size(),"数据尺度不匹配"
+            assert target[k].size() == refer[k].size(),"数据尺度不匹配 name: {} shape_t: {} shape_r: {}".format(k,target[k].size(),refer[k].size())
             target[k] = refer[k]
     return target
 

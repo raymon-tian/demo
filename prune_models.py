@@ -80,11 +80,14 @@ class ChannelPruneNet(nn.Module):
                 self.load_state_dict(own_weights)
             else:
                 self.__init__arch_from_weight(refer_weights)
+                own_weights = self.state_dict()
                 if self.fine_tune:
                     # self.__prune()
-                    self.load_state_dict(refer_weights)
+                    own_weights = inject_params(own_weights, refer_weights)
+                    self.load_state_dict(own_weights)
                 else:
-                    self.load_state_dict(refer_weights)
+                    own_weights = inject_params(own_weights, refer_weights)
+                    self.load_state_dict(own_weights)
                     self.__prune()
 
     def vgg16_init(self):
@@ -439,16 +442,10 @@ class ChannelPruneNet(nn.Module):
         now_weight = self.state_dict()
         for k,v in saved_weight.items():
             if k in now_weight.keys():
-                name = k.split('.')[0]
-                if now_weight[k].size() != v.size():
+                names = k.split('.')
+                name = names[0]
+                if now_weight[k].size() != v.size() and names[1] == 'weight':
                     assert k.startswith('conv'),"参数不一致的地方不是conv层"
-                    flag = False
-                    for it in self.conv_names:
-                        n1,n2,_ = it
-                        if name == n1 or name ==  n2:
-                            flag = True
-                            break
-                    assert flag,"参数不一致的层不是需要剪枝的层"
                     new_params = {}
                     new_params['out_channels'] = v.size()[0]
                     new_params['in_channels'] = v.size()[1]
