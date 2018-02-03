@@ -37,9 +37,14 @@ class ChannelPruneNet(nn.Module):
         self.conv_names = conv_names
         self.num_classes = num_classes
         self.fine_tune = fine_tune
+        ''' 存储sc算法产生的loss'''
+        # self.loss_sc_recons_list = []
+        # self.loss_sc_norm_list = []
+        # self.loss_sc_inrecons_list = []
         ''' 初始化原始网络对应的网络层'''
         getattr(self,model_name+'_init')()
         ''' 安装插件：初始化 待压缩的卷积层的 CM层插件 或者 subspace层 插件 该阶段不需要压缩率信息 以及 第二层的名字'''
+        # if (not is_teacher) and phase == 1:
         if not is_teacher:
             self.is_init_forward = True
             ''' 固定网络的输入，进行demo演示，获得各个卷积模块的特征图'''
@@ -47,28 +52,18 @@ class ChannelPruneNet(nn.Module):
                 self.demo_input = Variable(torch.randn(1, 1, 28, 28))
             elif model_name == 'vgg16':
                 self.demo_input = Variable(torch.randn(1, 3, 224, 224))
-            else:
-                raise ValueError
-            ''' 适配原始网络结构 '''
             _, demo_output = getattr(self, model_name + '_forward')(self.demo_input)
             self.is_init_forward = False
-            ''' 为conv层安装插件 '''
             for item in conv_names:
-                conv_n1, conv_n2, ratio = item
-                ''' 该层原始的输出通道数 '''
+                conv_n1, _, _ = item
                 out_channels = eval('self.'+conv_n1+'.out_channels')
                 setattr(self,conv_n1+'_out_channels',out_channels)
-                ''' 该层将要保留的通道数 '''
-                left_out_channels = int(np.ceil(out_channels * ratio))
-                assert left_out_channels != 0, "left_out_channels 不能为0"
-
                 if self.channel_select_algo == 'sparse_vec':
-                    setattr(self,conv_n1+'_cm',ChannelMultiplier(out_channels,left_out_channels))
+                    setattr(self,conv_n1+'_cm',ChannelMultiplier(out_channels))
                 elif self.channel_select_algo == 'subspace_cluster':
                     _,fea_C,fea_H,fea_W = demo_output[conv_n1].size()
                     # edit! 超参数
-                    setattr(self,conv_n1+'_sc',SubspaceCluster(H=fea_H,W=fea_W,K=fea_C,left_ch_num=left_out_channels))
-
+                    setattr(self,conv_n1+'_sc',SubspaceCluster(H=fea_H,W=fea_W,K=fea_C))
         ''' 加载权重 '''
         if self.weight_path is not None:
             refer_weights = torch.load(self.weight_path)
@@ -79,9 +74,31 @@ class ChannelPruneNet(nn.Module):
                 own_weights = inject_params(own_weights,refer_weights)
                 self.load_state_dict(own_weights)
             else:
-                self.__init__arch_from_weight(refer_weights)
+                """
+                # 如果初始参数中存在CM层，则表明phase2阶段加载的weights来自于phase1，需要1.初始化一个CM层,加载参数 2.prune
+                need_prune = False
+                for k in refer_weights.keys():
+                    # bug when 参数中有 multiplier，但是不是CM层
+                    if 'cm.multiplier' in k:
+                        need_prune = True
+                        break
+                if need_prune:
+                    # 添加对应的缺少的CM层
+                    for item in conv_names:
+                        conv_n1, _, compress_ratio = item
+                        out_channels = eval('self.' + conv_n1 + '.out_channels')
+                        setattr(self, conv_n1 + '_out_channels', out_channels)
+                        setattr(self, conv_n1 + '_cm', ChannelMultiplier(out_channels))
+                        setattr(self, conv_n1 + '_ratio', compress_ratio)
+                    own_weights = self.state_dict()
+                    own_weights = inject_params(own_weights,refer_weights) # 拷贝相应的参数
+                    self.load_state_dict(own_weights)
+                    self.__prune() # 进行剪枝
+                else:
+                    self.load_state_dict(refer_weights)
+                """
                 if self.fine_tune:
-                    # self.__prune()
+                    self.__prune()
                     self.load_state_dict(refer_weights)
                 else:
                     self.load_state_dict(refer_weights)
@@ -429,31 +446,6 @@ class ChannelPruneNet(nn.Module):
             ori_params[k] = v
         delattr(self,name)
         setattr(self,name,nn.Conv2d(**ori_params))
-
-    def __init__arch_from_weight(self,saved_weight):
-        """
-        根据传入的参数，去修改网络结构
-        :param saved_weight:
-        :return:
-        """
-        now_weight = self.state_dict()
-        for k,v in saved_weight.items():
-            if k in now_weight.keys():
-                name = k.split('.')[0]
-                if now_weight[k].size() != v.size():
-                    assert k.startswith('conv'),"参数不一致的地方不是conv层"
-                    flag = False
-                    for it in self.conv_names:
-                        n1,n2,_ = it
-                        if name == n1 or name ==  n2:
-                            flag = True
-                            break
-                    assert flag,"参数不一致的层不是需要剪枝的层"
-                    new_params = {}
-                    new_params['out_channels'] = v.size()[0]
-                    new_params['in_channels'] = v.size()[1]
-                    new_params['kernel_size'] = (v.size(2),v.size(3))
-                    self.__reinit_layer(name,**new_params)
 
     def remove_cm(self):
         """

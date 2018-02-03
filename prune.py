@@ -6,20 +6,32 @@
 需要的先验信息
 { (name_layer_i,name_layer_i+1),...(name_layer_i,name_layer_i+1) }
 """
+from __future__ import print_function
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import optim
 from torch import nn
 import os
-from pprint import pprint
 
 from config import config
 from prune_models import ChannelPruneNet
 from data_loader import get_data_loader
 from mine_layers import AttentionMap
 
-pprint(config)
+base_path = os.path.join('./weight',config['dataset_name'] + '-' + config['model_name'],config['channel_select_algo'])
+save_path = os.path.join(base_path,config['exp_name'])
+if os.path.exists(save_path) is False:
+    os.makedirs(save_path)
+
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger()
+logger.addHandler(logging.FileHandler(os.path.join(save_path,'log-{}.txt'.format(config['phase'])), 'a'))
+print = logger.info
+print(config)
+
 ''' 加载数据集 '''
 train_loader, test_loader = get_data_loader()
 ''' 初始化 teacher model '''
@@ -239,12 +251,18 @@ def train(e):
             # 'Train Epoch: {:3d} [{:5d}/{:5d} ({:2.0f}%)]\tLoss: {:.6f}'.format(
             #     e, batch_idx * len(data), len(train_loader.dataset), 100. * batch_idx / len(train_loader), loss.data[0]
             # ))
-save_path = os.path.join('./weight',config['dataset_name'] + '-' + config['model_name'],config['channel_select_algo'])
-if os.path.exists(save_path) is False:
-    os.makedirs(save_path)
+# base_path = os.path.join('./weight',config['dataset_name'] + '-' + config['model_name'],config['channel_select_algo'])
+# save_path = os.path.join(base_path,config['exp_name'])
+# if os.path.exists(save_path) is False:
+#     os.makedirs(save_path)
 
+flag = True
 for e in range(1,config['epoch']+1):
-    test()
+    if config['phase'] == 1 and flag == True:
+        test()
+        flag = False
+    elif config['phase'] == 2:
+        test()
     train(e)
     if e % config['save_freq'] == 0 or e == config['epoch']:
         torch.save(stu_model.state_dict(),os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e)))
