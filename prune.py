@@ -157,6 +157,7 @@ def test():
 # for e in range(1,config['epoch']+1):
 def train(e):
     stu_model.train()
+    epoch_loss = []
     for batch_idx, (data, target) in enumerate(train_loader):
         ''' 1. 包裹Tensor为Variable '''
         tea_data, _ = Variable(data.cuda(),volatile=True),Variable(target.cuda())#本质上，不需要求关于input 以及 target的梯度，因为网络中参数的变化并不会导致input以及target的变化
@@ -245,6 +246,8 @@ def train(e):
         loss.backward()
         ''' 5. 参数更新'''
         optimizer.step()
+
+        epoch_loss.append(loss.data[0])
         """
         if config['phase'] == 1:
             if config['channel_select_algo'] == 'sparse_vec':
@@ -261,6 +264,7 @@ def train(e):
                     loss.data[0],loss_F.data[0],loss_A.data[0], loss_reg.data[0], sparse_min.data[0], sparse_max.data[0]
                 ))
         """
+    print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,sum(epoch_loss)/len(epoch_loss)))
 
 flag = True
 for e in range(config['start_epoch'],config['epoch']+1):
