@@ -40,7 +40,7 @@ class ChannelMultiplier(nn.Module):
     """
     对于一个输入的特征图 X (N,C,H,W),在其每一个通道处学习一个scalar，一共学习得到C个scalar
     """
-    def __init__(self,num_c,left_ch_num):
+    def __init__(self,num_c,left_ch_num=0):
         super(ChannelMultiplier,self).__init__()
         self.num_c = num_c
         self.left_ch_num = left_ch_num
@@ -70,7 +70,7 @@ class SubspaceCluster(nn.Module):
     # 3. 不清楚其约束
     # 4. 不要在 子图内 求 loss
     # """
-    def __init__(self,H,W,K,left_ch_num):
+    def __init__(self,H,W,K,left_ch_num=0):
         super(SubspaceCluster,self).__init__()
         self.H = H
         self.W = W

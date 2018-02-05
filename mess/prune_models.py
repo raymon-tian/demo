@@ -10,16 +10,14 @@ from mine_utils import get_top_k,inject_params,spectrum_cluster
 
 class ChannelPruneNet(nn.Module):
     """
-    存在三个阶段
-    phase1 : 通道选择阶段。该阶段原始参数不更新，保持不变；仅仅跟新插件参数
-    phase2 : 最小化重构误差。该阶段插件参数保持不变，仅仅跟新特定的层
-    phase3 : fine-tune 根据原始任务fine-tune
+    每个模型存在着两个阶段
+    phase1 : 学习用于通道选择的稀疏向量，同时最小化Loss_Attention;i.e., min Loss_vec + Loss_A
+    phase2 : 剪枝通道：从phase1阶段学习得到的稀疏向量中选取topk，然后剪枝
     """
-    def __init__(self,model_name,channel_select_algo=None,is_teacher=True,phase=1,weight_path=None,conv_names=None,**kwargs):
+    def __init__(self,model_name,channel_select_algo=None,is_teacher=True,phase=1,weight_path=None,conv_names=None,num_classes=1000,fine_tune=False,**kwargs):
         """
         阶段1 ： 仅仅学习一个稀疏向量； phase = 2： 剪枝 + fine tune
         :param model_name: 待剪枝的模型的名称
-        :param channel_select_algo: 通道选择算法
         :param is_teacher: 是否为 teacher model
         :param phase: phase1：加载teacher_weight,每个conv层之后安装一个插件——CM层，为每一个conv层学习一个CM层，目标为 min知识误差 以及 稀疏化CM层
                       phase2：加载p1_weight，prune，之后min知识误差，最后模型存储的时候，去掉对应的CM层
@@ -29,7 +27,7 @@ class ChannelPruneNet(nn.Module):
         assert model_name in ['vgg16','resNet50','demo'], "不支持的网络模型"
         assert channel_select_algo in ['subspace_cluster','random','thinet','sparse_vec',None],"不支持的通道选择算法"
         assert (weight_path is not None) and (weight_path is not ''),"weight_path 非法"
-        assert phase == 1 or phase == 2 or phase == 3, "phase非法"
+        assert phase == 1 or phase == 2, "phase非法"
         super(ChannelPruneNet, self).__init__()
         self.model_name = model_name
         self.channel_select_algo = channel_select_algo
@@ -37,8 +35,8 @@ class ChannelPruneNet(nn.Module):
         self.is_teacher = is_teacher
         self.weight_path = weight_path
         self.conv_names = conv_names
-        # self.num_classes = num_classes
-        # self.fine_tune = fine_tune
+        self.num_classes = num_classes
+        self.fine_tune = fine_tune
         ''' 初始化原始网络对应的网络层'''
         getattr(self,model_name+'_init')()
         ''' 安装插件：初始化 待压缩的卷积层的 CM层插件 或者 subspace层 插件 该阶段不需要压缩率信息 以及 第二层的名字'''
@@ -51,28 +49,27 @@ class ChannelPruneNet(nn.Module):
                 self.demo_input = Variable(torch.randn(1, 3, 224, 224))
             else:
                 raise ValueError
-            ''' 适配原始网络结构，数据流图与原始网络一模一样 '''
+            ''' 适配原始网络结构 '''
             _, demo_output = getattr(self, model_name + '_forward')(self.demo_input)
-            ''' 获取网络的所有卷积层名称 '''
-            self.all_conv_names = demo_output.keys()
             self.is_init_forward = False
-            ''' 为conv层安装插件 ： 已经得到了各个卷积层的输出信息'''
-            for item in self.all_conv_names:
-                conv_n1 = item
+            ''' 为conv层安装插件 '''
+            for item in conv_names:
+                conv_n1, conv_n2, ratio = item
                 ''' 该层原始的输出通道数 '''
                 out_channels = eval('self.'+conv_n1+'.out_channels')
                 setattr(self,conv_n1+'_out_channels',out_channels)
-                # ''' 该层将要保留的通道数 '''
-                # left_out_channels = int(np.ceil(out_channels * ratio))
-                # assert left_out_channels != 0, "left_out_channels 不能为0"
+                ''' 该层将要保留的通道数 '''
+                left_out_channels = int(np.ceil(out_channels * ratio))
+                assert left_out_channels != 0, "left_out_channels 不能为0"
 
                 if self.channel_select_algo == 'sparse_vec':
-                    setattr(self,conv_n1+'_cm',ChannelMultiplier(out_channels))
+                    setattr(self,conv_n1+'_cm',ChannelMultiplier(out_channels,left_out_channels))
                 elif self.channel_select_algo == 'subspace_cluster':
                     _,fea_C,fea_H,fea_W = demo_output[conv_n1].size()
-                    setattr(self,conv_n1+'_sc',SubspaceCluster(H=fea_H,W=fea_W,K=fea_C))
+                    # edit! 超参数
+                    setattr(self,conv_n1+'_sc',SubspaceCluster(H=fea_H,W=fea_W,K=fea_C,left_ch_num=left_out_channels))
 
-        ''' 加载权重 以及 网络结构调整、剪枝 '''
+        ''' 加载权重 '''
         if self.weight_path is not None:
             refer_weights = torch.load(self.weight_path)
             own_weights = self.state_dict()
@@ -82,17 +79,13 @@ class ChannelPruneNet(nn.Module):
                 own_weights = inject_params(own_weights,refer_weights)
                 self.load_state_dict(own_weights)
             else:
-                ''' 根据现在已经学习到的参数再一次调整网络结构 '''
                 self.__init__arch_from_weight(refer_weights)
                 own_weights = self.state_dict()
-                if self.__need_prune(refer_weights) is False:
-                    ''' 不需要进行剪枝 直接加载参数'''
-                    print('there are no conv layers to be prund\n')
+                if self.fine_tune:
+                    # self.__prune()
                     own_weights = inject_params(own_weights, refer_weights)
                     self.load_state_dict(own_weights)
                 else:
-                    ''' 需要剪枝 ： 先加载参数，后剪枝'''
-                    print('there are conv layers to be prund\n')
                     own_weights = inject_params(own_weights, refer_weights)
                     self.load_state_dict(own_weights)
                     self.__prune()
@@ -142,7 +135,7 @@ class ChannelPruneNet(nn.Module):
             nn.Linear(4096, 4096),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(4096, 1000),
+            nn.Linear(4096, self.num_classes),
         )
 
     def vgg16_forward(self,x):
@@ -255,16 +248,30 @@ class ChannelPruneNet(nn.Module):
 
     def exec_plugin(self,name,x,):
         """"""
-        if self.is_teacher or self.is_init_forward or self.training == False or self.phase!=1:
+        if self.is_teacher or self.is_init_forward or self.training == False:
+            return x
+        flag = False
+        for item in self.conv_names:
+                conv_n1, _, _ = item
+                if name == conv_n1:
+                    flag = True
+                    break
+        if flag is False or self.phase == 2 or self.is_teacher == True:
             return x
         else:
             if self.channel_select_algo == 'sparse_vec':
                 return eval('self.'+name+'_cm')(x)
             elif self.channel_select_algo == 'subspace_cluster':
                 x = eval('self.'+name+'_sc')(x)
+                # self.loss_sc_recons_list.append(the_loss_sc[0])
+                # self.loss_sc_inrecons_list.append(the_loss_sc[1])
+                # self.loss_sc_norm_list.append(the_loss_sc[2])
                 return x
 
     def forward(self,x,is_test=False):
+        # self.loss_sc_norm_list[:] = []
+        # self.loss_sc_inrecons_list[:] = []
+        # self.loss_sc_recons_list[:] = []
         y_p, conv_output = getattr(self,self.model_name+'_forward')(x)
         return y_p, conv_output
 
@@ -273,20 +280,15 @@ class ChannelPruneNet(nn.Module):
         根据学习得到的权重向量剪枝，剪枝对应的 i-th层 以及 (i+1)-th 层的conv层;
         :return:
         """
-        refer_weight = self.state_dict()
-
         for item in self.conv_names:
             conv_n1,conv_n2,ratio = item
-            """ 该通道不需要剪枝，则跳过"""
-            if self.__need_prune_layer(conv_n1,conv_n2,refer_weight) is False:
-                continue
-            print('{} and {} are pruned\n'.format(conv_n1,conv_n2))
+
             if self.channel_select_algo == 'subspace_cluster':
                 self.__subspace_cluster_prune(conv_n1,conv_n2,ratio)
             elif self.channel_select_algo == 'sparse_vec':
                 self.__sparse_vec_prune(conv_n1,conv_n2,ratio)
             else:
-                raise ValueError
+                pass
 
     def __sparse_vec_prune(self,conv_n1,conv_n2,ratio):
         """
@@ -369,13 +371,12 @@ class ChannelPruneNet(nn.Module):
         self.__reinit_layer(name=conv_n2,in_channels=len(cluster_result))
         conv_layer2.weight.data = conv2_result_w
 
-    """
     def __inject_pruned_params(self,path):
-        ''' 
+        """
         将剪枝后的参数加载到网络中去，这个必须要在构造函数中初始化各个子层的之后调用
         :param path:
         :return:
-        '''
+        """
         weights_pruned = torch.load(path)
         keys = weights_pruned.keys()
         num_key = len(keys)
@@ -406,7 +407,6 @@ class ChannelPruneNet(nn.Module):
                 i += 1 # 跳过下面的bias参数
         # 最后进行参数的拷贝
         self.load_state_dict(weights_pruned)
-    """
 
     def __reinit_layer(self,name,**kwargs):
         """
@@ -451,53 +451,6 @@ class ChannelPruneNet(nn.Module):
                     new_params['in_channels'] = v.size()[1]
                     new_params['kernel_size'] = (v.size(2),v.size(3))
                     self.__reinit_layer(name,**new_params)
-
-    def __need_prune(self,refer_weight):
-        """ 根据当前已经加载的权重，判断是否需要进行剪枝 """
-        flag = False
-        for item in self.conv_names:
-            conv_n1,conv_n2,_ = item
-            flag = self.__need_prune_layer(conv_n1,conv_n2,refer_weight)
-            if flag == True:
-                break
-        return flag
-
-    def __need_prune_layer(self,conv_n1,conv_n2,refer_weight):
-        """
-        判断当前层是否需要剪枝
-        :param conv_n1:
-        :param conv_n2:
-        :param refer_weight:
-        :return: True 表示该层需要剪枝
-        """
-        flag = False
-        conv1_w_k = conv_n1+'.weight'
-        conv2_w_k = conv_n2+'.weight'
-        assert conv1_w_k in refer_weight.keys(),"key: {} error".format(conv1_w_k)
-        assert conv2_w_k in refer_weight.keys(),"key: {} error".format(conv2_w_k)
-
-        if self.channel_select_algo == 'subspace_cluster':
-            conv1_sc_k = conv_n1 + '_sc.fc1.weight'
-            if conv1_sc_k in refer_weight.keys():
-                conv1_sc_w = refer_weight[conv1_sc_k]
-                flag1 = refer_weight[conv1_w_k].size()[0] != conv1_sc_w.size()[0]
-                flag2 = refer_weight[conv2_w_k].size()[1] != conv1_sc_w.size()[0]
-                assert flag1 == flag2,'bug exist in prune {}  and {}'.format(conv1_w_k,conv2_w_k)
-                if flag1 is False:
-                    flag = True
-        elif self.channel_select_algo == 'sparse_vec':
-            conv1_cm_k = conv_n1 + '_cm.multiplier'
-            if conv1_cm_k in refer_weight.keys():
-                conv1_cm_k = refer_weight[conv1_cm_k]
-                flag1 = refer_weight[conv1_w_k].size()[0] != conv1_cm_k.size()[0]
-                flag2 = refer_weight[conv2_w_k].size()[1] != conv1_cm_k.size()[0]
-                assert flag1 == flag2, 'bug exist in prune {}  and {}'.format(conv1_w_k, conv2_w_k)
-                if flag1 is False:
-                    flag = True
-        else:
-            raise ValueError
-
-        return flag
 
     def remove_cm(self):
         """
