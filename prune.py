@@ -122,7 +122,7 @@ def test():
     correct_top1 = 0
     correct_top3 = 0
     correct_top5 = 0
-    for data, target in test_loader:
+    for batch_idx,(data, target) in enumerate(test_loader):
         data, target = data.cuda(), target.cuda()
         data, target = Variable(data, volatile=True), Variable(target)
         output, conv_output = stu_model.forward(data,is_test=True)
@@ -145,6 +145,8 @@ def test():
         correct_top1 += count_top1
         correct_top3 += count_top3
         correct_top5 += count_top5
+
+        print('{:5d}/{:5d}'.format( batch_idx * len(data), len(test_loader.dataset)))
 
     test_loss /= len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, top1: {}/{} ({:.5f}%)\ttop3: {}/{} ({:.5f}%)\ttop5: {}/{} ({:.5f}%)\n'.format(

@@ -7,7 +7,7 @@ config['weight_path'] = 'weight/imagenet12-vgg16/vgg16-org.pth'
 # config['stu_weight_path'] = 'weight/imagenet12-vgg16/subspace_cluster/conv3_3/stage2_epoch3.pth'
 # config['stu_weight_path'] = 'weight/imagenet12-vgg16/subspace_cluster/single2x/stage2_epoch3.pth'
 # config['stu_weight_path'] = './weight/mnist-demo/mnist_org.ckpt'
-config['stu_weight_path'] = 'weight/imagenet12-vgg16/subspace_cluster/single2x/conv5_1/stage2_epoch51.pth'
+config['stu_weight_path'] = 'weight/imagenet12-vgg16/subspace_cluster/single2x/conv4_2/stage2_epoch7.pth'
 config['gamma'] = 2*1e0
 config['beta'] = 1e0
 config['epoch'] = 100
@@ -29,7 +29,7 @@ config['conv_pruned_names'] = [
     # ('conv4_1','conv4_2',0.4),
     ('conv4_2','conv4_3',0.5),
     # ('conv4_3','conv5_1',1.),
-    ('conv5_1','conv5_2',0.5),
+    # ('conv5_1','conv5_2',0.5),
     # ('conv5_2','conv5_3',1.),
 ]
 config['channel_select_algo'] = 'subspace_cluster'
@@ -38,6 +38,6 @@ config['model_name'] = 'vgg16'
 config['dataset_name'] = 'imagenet12'
 config['topC'] = 3
 config['randomN'] = 10
-config['exp_name'] = 'single2x/conv5_1'
-config['explain'] = 'compress conv5_1'
-config['start_epoch'] = 52
+config['exp_name'] = 'single2x/conv4_2'
+config['explain'] = 'compress conv4_2'
+config['start_epoch'] = 8
