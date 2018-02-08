@@ -230,7 +230,8 @@ def train(e):
 
             loss_A = sum(loss_A1_list) + sum(loss_A2_list)
             # !edit 使用最后一个重构误差
-            loss_F = sum(loss_fea_list)
+            # loss_F = sum(loss_fea_list)
+            loss_F = loss_fea_list[-1]
             loss = loss_F
 
             print(
