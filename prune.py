@@ -275,7 +275,7 @@ for e in range(config['start_epoch'],config['epoch']+1):
     if config['phase'] == 1 and flag == True:
         test()
         flag = False
-    elif config['phase'] == 2:
+    elif config['phase'] == 2 or config['phase'] == 3:
         test()
     train(e)
     if e % config['save_freq'] == 0 or e == config['epoch']:
