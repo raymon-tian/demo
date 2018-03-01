@@ -19,9 +19,9 @@ torch.manual_seed(seed)
 if cuda:
     torch.cuda.manual_seed(seed)
 
-kwargs = {'num_workers': 1, 'pin_memory': True} if cuda else {}
+kwargs = {'num_workers': 8, 'pin_memory': True} if cuda else {}
 
-def get_data_loader(name=None):
+def get_data_loader(name=None,only_train=False):
     """
 
     :param name:
@@ -32,7 +32,7 @@ def get_data_loader(name=None):
     if name == "mnist":
         return mnist_data_loader()
     elif name == 'imagenet12':
-        return imagenet12_data_loader()
+        return imagenet12_data_loader(only_train)
     elif name == "cifar10":
         return cifar10_data_loader()
     elif name == "cifar100":
@@ -79,7 +79,7 @@ def cifar10_data_loader():
 
     return train_loader,test_loader
 
-def imagenet12_data_loader():
+def imagenet12_data_loader(only_train=False):
 
     traindir = './data/imagenet12/train'
     valdir = './data/imagenet12/val'
@@ -99,20 +99,23 @@ def imagenet12_data_loader():
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,**kwargs)
 
-    val_dataset = ImageFolder(
-        root=valdir,
-        transform=transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]),
-        topC=topC,
-        randomN=0
-    )
-    val_loader = DataLoader(val_dataset,batch_size=test_batch_size,shuffle=False,**kwargs)
+    if only_train is False:
+        val_dataset = ImageFolder(
+            root=valdir,
+            transform=transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ]),
+            topC=topC,
+            randomN=0
+        )
+        val_loader = DataLoader(val_dataset,batch_size=test_batch_size,shuffle=False,**kwargs)
 
-    return train_loader,val_loader
+        return train_loader,val_loader
+    else:
+        return train_loader
 
 if __name__ == '__main__':
     train_loader, val_dataset = imagenet12_data_loader()

@@ -105,11 +105,15 @@ for item in config['conv_pruned_names']:
 """
 
 optimizer = optim.Adam(params_opt,lr=config['lr'])
+# if config['optimizer_path'] is not '':
+#     with open(config['optimizer_path'],'rb') as saved_optimizer:
+#         optimizer = pickle.load(saved_optimizer)
+
 ''' 初始化工具层 '''
 att_map_layer = AttentionMap()
 criterion = nn.MSELoss()
 criterion_l1 = nn.L1Loss(size_average=False) # 使用L1 Loss来计算l1 范数
-criterion_cls = nn.CrossEntropyLoss().cuda()
+criterion_cls = nn.CrossEntropyLoss()
 
 
 # 打印cm层学到的参数
@@ -277,7 +281,11 @@ for e in range(config['start_epoch'],config['epoch']+1):
         flag = False
     elif config['phase'] == 2 or config['phase'] == 3:
         test()
+        pass
     train(e)
     if e % config['save_freq'] == 0 or e == config['epoch']:
-        torch.save(stu_model.state_dict(),os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e)))
+        epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
+        torch.save(stu_model.state_dict(),epoch_save_path)
+        stu_model.load_state_dict(torch.load(epoch_save_path))
+
         pass

@@ -49,7 +49,9 @@ def make_dataset(dir, class_to_idx, topC, randomN):
                     item = (path, class_to_idx[target])
                     temp_fnames.append(item)
             if (randomN is not 0) and randomN < len(temp_fnames):
+                # np.random.seed(0)
                 random_indices = np.random.choice(len(temp_fnames),randomN,False)
+                # random_indices = range(0,randomN)
                 for idx in random_indices:
                     images.append(temp_fnames[idx])
             else:

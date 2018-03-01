@@ -81,7 +81,7 @@ class ChannelPruneNet(nn.Module):
             elif self.phase == 1:
                 own_weights = inject_params(own_weights,refer_weights)
                 self.load_state_dict(own_weights)
-            else:
+            elif self.phase == 2:
                 ''' 根据现在已经学习到的参数再一次调整网络结构 '''
                 self.__init__arch_from_weight(refer_weights)
                 own_weights = self.state_dict()
@@ -96,6 +96,12 @@ class ChannelPruneNet(nn.Module):
                     own_weights = inject_params(own_weights, refer_weights)
                     self.load_state_dict(own_weights)
                     self.__prune()
+            elif self.phase == 3:
+                self.__init__arch_from_weight(refer_weights)
+                self.load_state_dict(refer_weights)
+                pass
+            else:
+                raise ValueError
 
     def vgg16_init(self):
         self.conv1_1 = nn.Conv2d(in_channels=3,out_channels=64,kernel_size=3,padding=1)
