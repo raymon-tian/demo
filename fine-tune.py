@@ -73,9 +73,10 @@ def train(e):
             iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
             torch.save(stu_model.state_dict(), iter_save_path)
             print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss)/len(epoch_loss),iter_save_path))
+            test(iter_save_path)
         ''' 模型测试 '''
-        if (batch_idx / num_batch_save > 0) and batch_idx % (num_batch_save * 1) == 0:
-            test()
+        # if (batch_idx / num_batch_save > 0) and batch_idx % (num_batch_save * 1) == 0:
+        #     test()
 
     the_epoch_av_loss = sum(epoch_loss)/len(epoch_loss)
     epoch_average_loss.append(the_epoch_av_loss)
@@ -88,7 +89,7 @@ def train(e):
 
     print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,the_epoch_av_loss))
 
-def test():
+def test(explain=None):
 
     global stu_model
     global test_loader
@@ -125,11 +126,12 @@ def test():
         print('{:5d}/{:5d}'.format( batch_idx * len(data), len(test_loader.dataset)))
 
     test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, top1: {}/{} ({:.5f}%)\ttop3: {}/{} ({:.5f}%)\ttop5: {}/{} ({:.5f}%)\n'.format(
+    print('\nTest set: Average loss: {:.4f}, top1: {}/{} ({:.5f}%)\ttop3: {}/{} ({:.5f}%)\ttop5: {}/{} ({:.5f}%)\tsaved: {}\n'.format(
         test_loss,
         correct_top1, len(test_loader.dataset),100. * correct_top1 / len(test_loader.dataset),
         correct_top3, len(test_loader.dataset),100. * correct_top3 / len(test_loader.dataset),
-        correct_top5, len(test_loader.dataset),100. * correct_top5 / len(test_loader.dataset)
+        correct_top5, len(test_loader.dataset),100. * correct_top5 / len(test_loader.dataset),
+        explain
     ))
 
 def cust_adjust_lr(loss_his,lr):
