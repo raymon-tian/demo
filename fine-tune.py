@@ -69,7 +69,7 @@ def train(e):
 
         ''' 模型存储 '''
         num_batch_save = int(config['save_iter'] / len(data))
-        if (batch_idx / num_batch_save > 0) and batch_idx % num_batch_save == 0:
+        if ((batch_idx + 1)/ num_batch_save > 0) and (batch_idx + 1) % num_batch_save == 0:
             iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
             torch.save(stu_model.state_dict(), iter_save_path)
             print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss)/len(epoch_loss),iter_save_path))

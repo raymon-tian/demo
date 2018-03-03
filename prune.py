@@ -50,7 +50,6 @@ stu_model = ChannelPruneNet(
     conv_names=config['conv_pruned_names'],
 )
 stu_model.cuda()
-stu_model.train()
 ''' 优化参数设置 ： 仅仅优化student model需要优化的参数 '''
 # optimizer = optim.Adam(list(stu_model.conv1.parameters())+list(stu_model.cm1.parameters()),lr=config['lr'])
 params_opt = []
@@ -66,6 +65,7 @@ if config['phase'] == 1:
         else:
             raise ValueError
 elif config['phase'] == 2:
+    added_params = []
     for item in config['conv_pruned_names']:
         conv_name1, conv_name2, ratio = item
         conv_layer1 = eval('stu_model.' + conv_name1)
@@ -74,8 +74,12 @@ elif config['phase'] == 2:
             params_opt.append({'params': conv_layer2.parameters()})
         elif config['channel_select_algo'] == 'subspace_cluster':
             ''' edit 这个地方需要考虑 '''
-            params_opt.append({'params': conv_layer1.parameters()})
-            params_opt.append({'params': conv_layer2.parameters()})
+            if (conv_name1 in added_params) is not True:
+                params_opt.append({'params': conv_layer1.parameters()})
+                added_params.append(conv_name1)
+            if (conv_name2 in added_params) is not True:
+                params_opt.append({'params': conv_layer2.parameters()})
+                added_params.append(conv_name2)
         else:
             raise ValueError
 elif config['phase'] == 3:
@@ -120,7 +124,7 @@ criterion_cls = nn.CrossEntropyLoss()
 # for param in stu_model.cm1.parameters():
 #     print param.data
 
-def test():
+def test(explain=None):
     stu_model.eval()
     test_loss = 0
     correct_top1 = 0
@@ -153,14 +157,14 @@ def test():
         print('{:5d}/{:5d}'.format( batch_idx * len(data), len(test_loader.dataset)))
 
     test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, top1: {}/{} ({:.5f}%)\ttop3: {}/{} ({:.5f}%)\ttop5: {}/{} ({:.5f}%)\n'.format(
+    print('\nTest set: Average loss: {:.4f}, top1: {}/{} ({:.5f}%)\ttop3: {}/{} ({:.5f}%)\ttop5: {}/{} ({:.5f}%)\t{}\n'.format(
         test_loss,
         correct_top1, len(test_loader.dataset),100. * correct_top1 / len(test_loader.dataset),
         correct_top3, len(test_loader.dataset),100. * correct_top3 / len(test_loader.dataset),
-        correct_top5, len(test_loader.dataset),100. * correct_top5 / len(test_loader.dataset)
+        correct_top5, len(test_loader.dataset),100. * correct_top5 / len(test_loader.dataset),
+        explain
     ))
 
-# for e in range(1,config['epoch']+1):
 def train(e):
     stu_model.train()
     epoch_loss = []
@@ -256,6 +260,15 @@ def train(e):
         optimizer.step()
 
         epoch_loss.append(loss.data[0])
+
+        ''' 模型存储 '''
+        num_batch_save = int(config['save_iter'] / len(data))
+        if (batch_idx + 1) % num_batch_save == 0:
+            iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
+            torch.save(stu_model.state_dict(), iter_save_path)
+            print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss) / len(epoch_loss), iter_save_path))
+            test(iter_save_path)
+
         """
         if config['phase'] == 1:
             if config['channel_select_algo'] == 'sparse_vec':
@@ -280,12 +293,11 @@ for e in range(config['start_epoch'],config['epoch']+1):
         test()
         flag = False
     elif config['phase'] == 2 or config['phase'] == 3:
-        test()
+        # test()
         pass
     train(e)
-    if e % config['save_freq'] == 0 or e == config['epoch']:
-        epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
-        torch.save(stu_model.state_dict(),epoch_save_path)
-        stu_model.load_state_dict(torch.load(epoch_save_path))
 
-        pass
+    # if e % config['save_freq'] == 0 or e == config['epoch']:
+    #     epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
+    #     torch.save(stu_model.state_dict(),epoch_save_path)
+    #     pass

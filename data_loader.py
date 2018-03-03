@@ -19,7 +19,7 @@ torch.manual_seed(seed)
 if cuda:
     torch.cuda.manual_seed(seed)
 
-kwargs = {'num_workers': 1, 'pin_memory': True} if cuda else {}
+kwargs = {'num_workers': 6, 'pin_memory': True} if cuda else {}
 
 def get_data_loader(name=None,only_train=False):
     """

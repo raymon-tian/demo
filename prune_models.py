@@ -462,7 +462,9 @@ class ChannelPruneNet(nn.Module):
         """ 根据当前已经加载的权重，判断是否需要进行剪枝 """
         flag = False
         for item in self.conv_names:
-            conv_n1,conv_n2,_ = item
+            conv_n1,conv_n2, ratio = item
+            if ratio == 1.:
+                continue
             flag = self.__need_prune_layer(conv_n1,conv_n2,refer_weight)
             if flag == True:
                 break
