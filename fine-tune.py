@@ -41,13 +41,13 @@ def train(e):
     global criterion_cls
     global train_loader
     global epoch_average_loss
+    global save_path
 
-    ''' 初始化工具层 '''
-    stu_model.train()
     epoch_loss = []
 
     for batch_idx, (data, target) in enumerate(train_loader):
 
+        stu_model.train()
         ''' 1. 包裹Tensor为Variable '''
         stu_data, target = Variable(data.cuda(),requires_grad=True),Variable(target.cuda())#本质上，不需要求关于input 以及 target的梯度，因为网络中参数的变化并不会导致input以及target的变化
         ''' 2. 优化器梯度清零 '''
@@ -66,6 +66,16 @@ def train(e):
         optimizer.step()
 
         epoch_loss.append(loss.data[0])
+
+        ''' 模型存储 '''
+        num_batch_save = int(config['save_iter'] / len(data))
+        if (batch_idx / num_batch_save > 0) and batch_idx % num_batch_save == 0:
+            iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
+            torch.save(stu_model.state_dict(), iter_save_path)
+            print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss)/len(epoch_loss),iter_save_path))
+        ''' 模型测试 '''
+        if (batch_idx / num_batch_save > 0) and batch_idx % (num_batch_save * 1) == 0:
+            test()
 
     the_epoch_av_loss = sum(epoch_loss)/len(epoch_loss)
     epoch_average_loss.append(the_epoch_av_loss)
@@ -125,11 +135,12 @@ def test():
 def cust_adjust_lr(loss_his,lr):
     if len(loss_his) < 3:
         return lr
-    if (loss_his[-1] > loss_his[-2]) and (loss_his[-2] > loss_his[-3]) and (lr > 0.25e-5):
+    if (loss_his[-1] > loss_his[-2]) and (loss_his[-2] > loss_his[-3]) and (lr > 0.25e-6):
         lr *= 0.5
         print('lr : {}'.format(lr))
         return lr
-    elif lr < 0.25e-5:
+    elif lr < 0.25e-6:
+        print('exit duo to too small lr')
         exit()
     else:
         return lr
@@ -158,12 +169,14 @@ if __name__ == '__main__':
     epoch_average_loss = []
 
     for e in range(config['start_epoch'], config['epoch'] + 1):
-        if e % config['test_freq'] == 0:
-            test()
+
+        test()
         train(e)
+        """
         if e % config['save_freq'] == 0 or e == config['epoch']:
             epoch_save_path = os.path.join(save_path, 'stage{}_epoch{}.pth'.format(config['phase'], e))
             torch.save(stu_model.state_dict(), epoch_save_path)
             pass
         if e % config['resample_data_freq'] == 0:
             train_loader = get_data_loader(only_train=True)
+        """
