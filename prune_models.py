@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
+from sklearn.cluster import KMeans
 
 from mine_layers import ChannelMultiplier,SubspaceCluster
 from mine_utils import get_top_k,inject_params,spectrum_cluster
@@ -27,7 +28,7 @@ class ChannelPruneNet(nn.Module):
         :param conv_names ((e1,e2,ratio),...) 表示前一层，后一层conv层的名字，以及对前一层的压缩率
         """
         assert model_name in ['vgg16','resNet50','demo'], "不支持的网络模型"
-        assert channel_select_algo in ['subspace_cluster','random','thinet','sparse_vec',None],"不支持的通道选择算法"
+        assert channel_select_algo in ['subspace_cluster','random','kmeans','sparse_vec','firstk','max_response',None],"不支持的通道选择算法"
         assert (weight_path is not None) and (weight_path is not ''),"weight_path 非法"
         assert phase == 1 or phase == 2 or phase == 3, "phase非法"
         super(ChannelPruneNet, self).__init__()
@@ -269,6 +270,8 @@ class ChannelPruneNet(nn.Module):
             elif self.channel_select_algo == 'subspace_cluster':
                 x = eval('self.'+name+'_sc')(x)
                 return x
+            else:
+                return x
 
     def forward(self,x,is_test=False):
         y_p, conv_output = getattr(self,self.model_name+'_forward')(x)
@@ -375,6 +378,87 @@ class ChannelPruneNet(nn.Module):
         self.__reinit_layer(name=conv_n2,in_channels=len(cluster_result))
         conv_layer2.weight.data = conv2_result_w
 
+    def __naive_prune(self,conv_n1,conv_n2,ratio):
+        """
+        使用一些简单算法剪枝卷积层
+        :param conv_n1: str
+        :param conv_n2: str
+        :param ratio: float
+        :return:
+        """
+
+        left_out_channels = int(np.ceil(eval('self.'+conv_n1+'_out_channels') * ratio))
+        assert left_out_channels != 0,"left_out_channels 不能为0"
+
+        ''' 原始的层 '''
+        conv_layer1 = eval('self.' + conv_n1)
+        conv1_ori_weight = conv_layer1.weight.data.clone()
+        conv1_ori_bias = conv_layer1.bias.data.clone()
+        conv_layer2 = eval('self.' + conv_n2)
+
+        if self.channel_select_algo == 'kmeans':
+            flat_conv1_ori_weight = conv1_ori_weight.view((conv1_ori_weight.shape[0],-1))
+            kmeans = KMeans(n_clusters=left_out_channels, random_state=0).fit(flat_conv1_ori_weight.clone())
+            labels = kmeans.labels_
+            unique_labels = np.unique(labels)
+
+            cluster_result = []
+            for l in unique_labels:
+                temp = []
+                for i in range(len(labels)):
+                    if labels[i] == l:
+                        temp.append(i)
+                cluster_result.append(temp)
+
+            cluster_kernel_w_result = []
+            cluster_kernel_b_result = []
+            ''' 聚类第一层卷积kernel的weight以及bias '''
+            for i in range(len(cluster_result)):
+                cluster_k_w = conv1_ori_weight[cluster_result[i],:,:,:]
+                cluster_mean_k_w = torch.mean(source=cluster_k_w,dim=0,keepdim=True)
+                cluster_mean_k_b = torch.mean(source=conv1_ori_bias[cluster_result[i]])
+                cluster_kernel_w_result.append(cluster_mean_k_w)
+                cluster_kernel_b_result.append(torch.Tensor([cluster_mean_k_b]))
+            conv1_result_w = torch.cat(cluster_kernel_w_result)
+            conv1_result_b = torch.cat(cluster_kernel_b_result)
+            ''' 聚类第二层卷积kernel '''
+            conv2_result_w = []
+            n_output = conv_layer2.weight.size()[0]
+            for i in range(n_output):
+                temp = []
+                single_k = conv_layer2.weight.data[i]
+                for j in range(len(cluster_result)):
+                    temp.append(torch.mean(single_k[cluster_result[j],:,:],dim=0,keepdim=True))
+                conv2_result_w.append(torch.cat(temp).unsqueeze(0))
+            conv2_result_w = torch.cat(conv2_result_w)
+
+        elif self.channel_select_algo in ['random','firstk','max_response']:
+            if self.channel_select_algo == 'random':
+                selected_indics = np.random.choice(eval('self.' + conv_n1 + '_out_channels'), left_out_channels,replace=False)
+                selected_indics = np.sort(selected_indics)
+            elif self.channel_select_algo == 'firstk':
+                selected_indics = [i for i in range(left_out_channels)]
+            else:
+                sum_list = [conv1_ori_weight[i,:,:,:].abs().sum() for i in range(eval('self.' + conv_n1 + '_out_channels'))]
+                selected_indics = np.argsort(sum_list)[::-1][:left_out_channels]
+                selected_indics = np.sort(selected_indics)
+            conv1_result_w = []
+            conv1_result_b = []
+            for i in selected_indics:
+                conv1_result_w.append(conv1_ori_weight[i,:,:,:])
+                conv1_result_b.append(conv1_ori_bias[i])
+            conv1_result_w = torch.cat(conv1_result_w)
+            conv1_result_b = torch.cat(conv1_result_b)
+
+        ''' 重新初始化第一层卷积'''
+        self.__reinit_layer(name=conv_n1, out_channels=left_out_channels)
+        conv_layer1.weight.data = conv1_result_w
+        conv_layer1.bias.data = conv1_result_b
+        ''' 重新初始化第二层卷积'''
+        self.__reinit_layer(name=conv_n2,in_channels=left_out_channels)
+        conv_layer2.weight.data = conv2_result_w
+
+
     """
     def __inject_pruned_params(self,path):
         ''' 
@@ -465,12 +549,12 @@ class ChannelPruneNet(nn.Module):
             conv_n1,conv_n2, ratio = item
             if ratio == 1.:
                 continue
-            flag = self.__need_prune_layer(conv_n1,conv_n2,refer_weight)
+            flag = self.__need_prune_layer(conv_n1,conv_n2,ratio,refer_weight)
             if flag == True:
                 break
         return flag
 
-    def __need_prune_layer(self,conv_n1,conv_n2,refer_weight):
+    def __need_prune_layer(self,conv_n1,conv_n2,ratio,refer_weight):
         """
         判断当前层是否需要剪枝
         :param conv_n1:
@@ -503,7 +587,13 @@ class ChannelPruneNet(nn.Module):
                 if flag1 is False:
                     flag = True
         else:
-            raise ValueError
+            left_out_channels = int(np.ceil(eval('self.' + conv_n1 + '_out_channels') * ratio))
+            assert left_out_channels != 0, "left_out_channels 不能为0"
+            flag1 = refer_weight[conv1_w_k].size()[0] == left_out_channels
+            flag2 = refer_weight[conv2_w_k].size()[1] == left_out_channels
+            assert flag1 == flag2, 'bug exist in prune {}  and {}'.format(conv1_w_k, conv2_w_k)
+            if flag1 is False:
+                flag = True
 
         return flag
 
