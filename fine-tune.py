@@ -82,10 +82,10 @@ def train(e):
     epoch_average_loss.append(the_epoch_av_loss)
 
     """ 调整 lr """
-    old_lr = lr
-    lr = cust_adjust_lr(epoch_average_loss, lr)
-    if old_lr != lr:
-        optimizer = optim.Adam(stu_model.parameters(), lr=lr)
+    # old_lr = lr
+    # lr = cust_adjust_lr(epoch_average_loss, lr)
+    # if old_lr != lr:
+    #     optimizer = optim.Adam(stu_model.parameters(), lr=lr)
 
     print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,the_epoch_av_loss))
 
