@@ -13,8 +13,8 @@ import torchvision.transforms as transforms
 import os
 import argparse
 
-from models import *
-from utils import progress_bar
+from torchvision.models import ResNet
+from cifar10_utils import progress_bar
 from torch.autograd import Variable
 
 

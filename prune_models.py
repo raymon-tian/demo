@@ -287,7 +287,7 @@ class ChannelPruneNet(nn.Module):
         for item in self.conv_names:
             conv_n1,conv_n2,ratio = item
             """ 该通道不需要剪枝，则跳过"""
-            if self.__need_prune_layer(conv_n1,conv_n2,refer_weight) is False:
+            if self.__need_prune_layer(conv_n1,conv_n2,ratio,refer_weight) is False:
                 continue
             print('{} and {} are pruned\n'.format(conv_n1,conv_n2))
             if self.channel_select_algo == 'subspace_cluster':

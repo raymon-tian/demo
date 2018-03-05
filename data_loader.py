@@ -91,8 +91,8 @@ def imagenet12_data_loader(only_train=False):
         transform=transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomRotation(30),
+            # transforms.RandomVerticalFlip(),
+            # transforms.RandomRotation(30),
             transforms.ToTensor(),
             normalize,
         ]),

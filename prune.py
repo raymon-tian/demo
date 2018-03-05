@@ -293,7 +293,7 @@ for e in range(config['start_epoch'],config['epoch']+1):
         test()
         flag = False
     elif config['phase'] == 2 or config['phase'] == 3:
-        # test()
+        test()
         pass
     train(e)
 
