@@ -295,7 +295,8 @@ class ChannelPruneNet(nn.Module):
             elif self.channel_select_algo == 'sparse_vec':
                 self.__sparse_vec_prune(conv_n1,conv_n2,ratio)
             else:
-                raise ValueError
+                # raise ValueError
+                self.__naive_prune(conv_n1,conv_n2,ratio)
 
     def __sparse_vec_prune(self,conv_n1,conv_n2,ratio):
         """
@@ -446,9 +447,20 @@ class ChannelPruneNet(nn.Module):
             conv1_result_b = []
             for i in selected_indics:
                 conv1_result_w.append(conv1_ori_weight[i,:,:,:])
-                conv1_result_b.append(conv1_ori_bias[i])
+                conv1_result_b.append(torch.FloatTensor([conv1_ori_bias[i]]))
             conv1_result_w = torch.cat(conv1_result_w)
             conv1_result_b = torch.cat(conv1_result_b)
+
+            ''' 聚类第二层卷积kernel '''
+            conv2_result_w = []
+            n_output = conv_layer2.weight.size()[0]
+            for i in range(n_output):
+                temp = []
+                single_k = conv_layer2.weight.data[i]
+                for j in range(left_out_channels):
+                    temp.append(single_k[selected_indics[j], :, :].unsqueeze(0))
+                conv2_result_w.append(torch.cat(temp).unsqueeze(0))
+            conv2_result_w = torch.cat(conv2_result_w)
 
         ''' 重新初始化第一层卷积'''
         self.__reinit_layer(name=conv_n1, out_channels=left_out_channels)

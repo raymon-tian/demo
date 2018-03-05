@@ -72,7 +72,8 @@ elif config['phase'] == 2:
         conv_layer2 = eval('stu_model.' + conv_name2)
         if config['channel_select_algo'] == 'sparse_vec':
             params_opt.append({'params': conv_layer2.parameters()})
-        elif config['channel_select_algo'] == 'subspace_cluster':
+        # elif config['channel_select_algo'] == 'subspace_cluster':
+        else:
             ''' edit 这个地方需要考虑 '''
             if (conv_name1 in added_params) is not True:
                 params_opt.append({'params': conv_layer1.parameters()})
@@ -80,8 +81,8 @@ elif config['phase'] == 2:
             if (conv_name2 in added_params) is not True:
                 params_opt.append({'params': conv_layer2.parameters()})
                 added_params.append(conv_name2)
-        else:
-            raise ValueError
+        # else:
+        #     raise ValueError
 elif config['phase'] == 3:
     params_opt.append({'params': stu_model.parameters()})
 else:
@@ -108,6 +109,7 @@ for item in config['conv_pruned_names']:
             params_opt.append({'params':conv_layer2.parameters()})
 """
 
+LR = config['lr']
 optimizer = optim.Adam(params_opt,lr=config['lr'])
 # if config['optimizer_path'] is not '':
 #     with open(config['optimizer_path'],'rb') as saved_optimizer:
@@ -165,7 +167,23 @@ def test(explain=None):
         explain
     ))
 
+def cust_adjust_lr(loss_his,lr):
+    if len(loss_his) < 3:
+        return lr
+    if (loss_his[-1] > loss_his[-2]):
+        lr *= 0.1
+        print('lr : {}'.format(lr))
+        return lr
+    elif lr < 0.25e-6:
+        print('exit duo to too small lr')
+        exit()
+    else:
+        return lr
+
 def train(e):
+    global LR
+    global optimizer
+
     stu_model.train()
     epoch_loss = []
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -262,12 +280,13 @@ def train(e):
         epoch_loss.append(loss.data[0])
 
         ''' 模型存储 '''
-        num_batch_save = int(config['save_iter'] / len(data))
-        if (batch_idx + 1) % num_batch_save == 0:
-            iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
-            torch.save(stu_model.state_dict(), iter_save_path)
-            print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss) / len(epoch_loss), iter_save_path))
-            test(iter_save_path)
+        # num_batch_save = int(config['save_iter'] / len(data))
+        # if (batch_idx + 1) % num_batch_save == 0:
+        #     iter_save_path = os.path.join(save_path, 'stage{}_epoch{}_iter{}.pth'.format(config['phase'], e, batch_idx))
+        #     torch.save(stu_model.state_dict(), iter_save_path)
+        #     print('iter_save_loss : {}\tpath:{}'.format(sum(epoch_loss) / len(epoch_loss), iter_save_path))
+        #     test(iter_save_path)
+
 
         """
         if config['phase'] == 1:
@@ -285,19 +304,34 @@ def train(e):
                     loss.data[0],loss_F.data[0],loss_A.data[0], loss_reg.data[0], sparse_min.data[0], sparse_max.data[0]
                 ))
         """
+
+    old_lr = LR
+    LR = cust_adjust_lr(epoch_loss, LR)
+    if old_lr != LR:
+        optimizer.state['lr'] = LR
     print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,sum(epoch_loss)/len(epoch_loss)))
 
 flag = True
 for e in range(config['start_epoch'],config['epoch']+1):
+
+    # if e < 8:
+    #     optimizer.state['lr'] = 1e-3
+    # elif e < 25:
+    #     optimizer.state['lr'] = 1e-4
+    # else:
+    #     optimizer.state['lr'] = 1e-5
+
     if config['phase'] == 1 and flag == True:
         test()
         flag = False
     elif config['phase'] == 2 or config['phase'] == 3:
-        test()
+        # test()
         pass
     train(e)
 
-    # if e % config['save_freq'] == 0 or e == config['epoch']:
-    #     epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
-    #     torch.save(stu_model.state_dict(),epoch_save_path)
-    #     pass
+    if e % config['save_freq'] == 0 or e == config['epoch']:
+        epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
+        torch.save(stu_model.state_dict(),epoch_save_path)
+        pass
+    if (e+1) % config['test_freq'] == 0:
+        test()
