@@ -122,6 +122,7 @@ criterion_l1 = nn.L1Loss(size_average=False) # 使用L1 Loss来计算l1 范数
 criterion_cls = nn.CrossEntropyLoss()
 
 
+epoch_loss_list = []
 # 打印cm层学到的参数
 # for param in stu_model.cm1.parameters():
 #     print param.data
@@ -175,7 +176,7 @@ def cust_adjust_lr(loss_his,lr):
         print('lr : {}'.format(lr))
         return lr
     elif lr < 0.25e-6:
-        print('exit duo to too small lr')
+        print('exit due to too small lr')
         exit()
     else:
         return lr
@@ -183,7 +184,7 @@ def cust_adjust_lr(loss_his,lr):
 def train(e):
     global LR
     global optimizer
-
+    global epoch_loss_list
     stu_model.train()
     epoch_loss = []
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -305,8 +306,9 @@ def train(e):
                 ))
         """
 
+    epoch_loss_list.append(sum(epoch_loss)/len(epoch_loss))
     old_lr = LR
-    LR = cust_adjust_lr(epoch_loss, LR)
+    LR = cust_adjust_lr(epoch_loss_list, LR)
     if old_lr != LR:
         optimizer.state['lr'] = LR
     print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,sum(epoch_loss)/len(epoch_loss)))
