@@ -316,12 +316,12 @@ def train(e):
 flag = True
 for e in range(config['start_epoch'],config['epoch']+1):
 
-    # if e < 8:
-    #     optimizer.state['lr'] = 1e-3
-    # elif e < 25:
-    #     optimizer.state['lr'] = 1e-4
-    # else:
-    #     optimizer.state['lr'] = 1e-5
+    if e < 10:
+        optimizer.state['lr'] = 1e-3
+    elif e < 15:
+        optimizer.state['lr'] = 1e-4
+    else:
+        optimizer.state['lr'] = 1e-5
 
     if config['phase'] == 1 and flag == True:
         test()
@@ -335,5 +335,5 @@ for e in range(config['start_epoch'],config['epoch']+1):
         epoch_save_path = os.path.join(save_path,'stage{}_epoch{}.pth'.format(config['phase'],e))
         torch.save(stu_model.state_dict(),epoch_save_path)
         pass
-    if (e+1) % config['test_freq'] == 0:
+    if e % config['test_freq'] == 0:
         test()
