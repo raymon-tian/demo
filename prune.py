@@ -307,21 +307,21 @@ def train(e):
         """
 
     epoch_loss_list.append(sum(epoch_loss)/len(epoch_loss))
-    old_lr = LR
-    LR = cust_adjust_lr(epoch_loss_list, LR)
-    if old_lr != LR:
-        optimizer.state['lr'] = LR
+    # old_lr = LR
+    # LR = cust_adjust_lr(epoch_loss_list, LR)
+    # if old_lr != LR:
+    #     optimizer.state['lr'] = LR
     print ('Epoch: {:3d}\taverage_epoch_loss: {:.6f}'.format(e,sum(epoch_loss)/len(epoch_loss)))
 
 flag = True
 for e in range(config['start_epoch'],config['epoch']+1):
 
-    if e < 10:
-        optimizer.state['lr'] = 1e-3
-    elif e < 15:
-        optimizer.state['lr'] = 1e-4
-    else:
-        optimizer.state['lr'] = 1e-5
+    # if e < 10:
+    #     optimizer.state['lr'] = 1e-4
+    # elif e < 15:
+    #     optimizer.state['lr'] = 1e-4
+    # else:
+    #     optimizer.state['lr'] = 1e-5
 
     if config['phase'] == 1 and flag == True:
         test()
