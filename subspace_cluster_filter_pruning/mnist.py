@@ -1,4 +1,3 @@
-#coding=utf-8
 from __future__ import print_function
 import argparse
 import torch
@@ -52,7 +51,7 @@ test_loader = torch.utils.data.DataLoader(
 
 class Net(nn.Module):
     def __init__(self):
-        super(Net, self).__init__() # 就是先调用了父类的构造函数一下
+        super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
@@ -115,9 +114,9 @@ class Net(nn.Module):
         return F.log_softmax(x)
 
 model = Net()
-# if args.cuda:
-#     model.cuda()
-ps = model.parameters()
+if args.cuda:
+    model.cuda()
+
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
 def train(epoch):
